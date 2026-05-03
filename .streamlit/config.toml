@@ -8,7 +8,6 @@
 # Сдержанная палитра в духе data.gov.ru / UK Government Analysis Function.
 # Primary #1f4e79 — глубокий синий, исторически уже использовался в проекте
 # (visualizations.PRIMARY_COLOR, popup'ы карты, заголовки). Палитра одобрена
-#.
 [theme]
 base = "light"
 primaryColor = "#1f4e79"
