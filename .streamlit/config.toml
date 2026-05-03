@@ -1,0 +1,41 @@
+# Streamlit project-level config.
+# Streamlit читает этот файл из CWD при запуске `streamlit run`,
+# поэтому он должен быть в корне проекта (НЕ в src/app/).
+
+# ================================================================
+# Тема — палитра «Государственный» (Вариант A docs/ui_research.md)
+# ================================================================
+# Сдержанная палитра в духе data.gov.ru / UK Government Analysis Function.
+# Primary #1f4e79 — глубокий синий, исторически уже использовался в проекте
+# (visualizations.PRIMARY_COLOR, popup'ы карты, заголовки). Палитра одобрена
+#.
+[theme]
+base = "light"
+primaryColor = "#1f4e79"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f6fa"
+textColor = "#1a1a1a"
+linkColor = "#1f4e79"
+borderColor = "#e1e5eb"
+
+# ----------------------------------------------------------------
+# Типографика — Inter + JetBrains Mono (Вариант I docs/ui_research.md §5)
+# ----------------------------------------------------------------
+# Inter — UI-шрифт со специально проработанной кириллицей и tabular figures.
+# JetBrains Mono — для inline-кода и числовых таблиц (равноширинные цифры).
+# Веса: 400 (body), 500 (label), 600 (subheading), 700 (heading), 800 (display).
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+
+[server]
+headless = true
+runOnSave = true
+fileWatcherType = "auto"
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = true

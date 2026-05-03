@@ -1,0 +1,326 @@
+/* ================================================================
+ * Дашборд «Анализ ДТП Приморского края» — глобальные стили
+ * Подгружается один раз через src.app.utils.styling.inject_css()
+ * Палитра: вариант A (Государственный), типографика: Inter + JetBrains Mono
+ * Спецификация — docs/ui_research.md §4–§5
+ * ================================================================ */
+
+/* ----------------------------------------------------------------
+ *  CSS-переменные — единая точка правки палитры/spacing
+ * ---------------------------------------------------------------- */
+:root {
+  --dtp-primary: #1f4e79;
+  --dtp-primary-soft: #2a5d8a;
+  --dtp-bg: #ffffff;
+  --dtp-bg-soft: #f4f6fa;
+  --dtp-text: #1a1a1a;
+  --dtp-muted: #6b7280;
+  --dtp-border: #e1e5eb;
+  --dtp-border-strong: #cbd2db;
+  --dtp-success: #27ae60;
+  --dtp-warning: #e67e22;
+  --dtp-danger: #c0392b;
+  --dtp-insight-bg: #ecfdf5;       /* нежно-зелёный фон для блоков «инсайт» */
+  --dtp-insight-border: #6ee7b7;
+  --dtp-radius: 8px;
+  --dtp-radius-sm: 6px;
+}
+
+/* ----------------------------------------------------------------
+ *  Главный контейнер — на всю ширину, умеренный боковой padding
+ * ----------------------------------------------------------------
+ *  Без max-width: с layout="wide" и без клампа ширина стабильно
+ *  полная и до, и после инжекта CSS, прыжка «узко → широко» нет.
+ *  Бьём ТОЛЬКО по block-container'ам main-области (НЕ по обёрткам
+ *  всего приложения и НЕ по sidebar). Padding 1.5rem совпадает с
+ *  дефолтом Streamlit'а — рамки на первом кадре не будет.
+ * ---------------------------------------------------------------- */
+section.main > div.block-container,
+[data-testid="stMainBlockContainer"],
+[data-testid="stAppViewBlockContainer"] {
+  padding-top: 2rem !important;
+  padding-bottom: 4rem !important;
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+  max-width: none !important;
+  border: 0 !important;
+}
+
+
+/* Дивайдер — крупнее зазоры, тонкая линия */
+hr,
+[data-testid="stMarkdownContainer"] hr {
+  margin: 2.25rem 0 !important;
+  border: 0 !important;
+  border-top: 1px solid var(--dtp-border) !important;
+}
+
+/* ----------------------------------------------------------------
+ *  Универсальный page-header (helper page_header()) — accent-bar слева
+ * ---------------------------------------------------------------- */
+.dtp-page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.25rem 0 1.25rem 0;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--dtp-border);
+}
+.dtp-page-header__bar {
+  width: 5px;
+  align-self: stretch;
+  background: var(--dtp-primary);
+  border-radius: 3px;
+  flex-shrink: 0;
+  min-height: 56px;
+}
+.dtp-page-header__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+.dtp-page-header__title {
+  font-size: 1.85rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--dtp-text);
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.dtp-page-header__title .dtp-page-header__icon {
+  margin-right: 0.5rem;
+  color: var(--dtp-primary);
+}
+.dtp-page-header__subtitle {
+  font-size: 1rem;
+  color: var(--dtp-muted);
+  line-height: 1.5;
+  max-width: 70ch;
+  margin: 0;
+}
+
+/* ----------------------------------------------------------------
+ *  KPI-карточки (st.container(border=True) с st.metric внутри)
+ * ---------------------------------------------------------------- */
+[data-testid="stMetric"] {
+  padding: 0.25rem 0;
+}
+[data-testid="stMetricLabel"] {
+  font-size: 0.92rem !important;
+  font-weight: 500 !important;
+  color: var(--dtp-muted) !important;
+  letter-spacing: 0.01em;
+}
+[data-testid="stMetricValue"] {
+  font-size: 2rem !important;
+  font-weight: 700 !important;
+  color: var(--dtp-text) !important;
+  font-feature-settings: "tnum" 1, "lnum" 1;  /* tabular figures */
+  line-height: 1.1;
+}
+[data-testid="stMetricDelta"] {
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
+}
+
+/* st.container(border=True) — единый радиус и border'ы */
+[data-testid="stVerticalBlockBorderWrapper"] {
+  border: 1px solid var(--dtp-border) !important;
+  border-radius: var(--dtp-radius) !important;
+  background: #ffffff !important;
+  padding: 1rem 1.1rem !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+/* Карточка KPI: лёгкая тень при hover (тонкий signal интерактивности) */
+[data-testid="stVerticalBlockBorderWrapper"]:hover {
+  border-color: var(--dtp-border-strong) !important;
+}
+
+/* ----------------------------------------------------------------
+ *  Заголовки h1..h3 — Inter, плотные веса
+ * ---------------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: "Inter", sans-serif !important;
+  letter-spacing: -0.01em;
+  color: var(--dtp-text);
+}
+h1 { font-size: 1.85rem !important; font-weight: 700 !important; }
+h2 { font-size: 1.4rem !important; font-weight: 600 !important; margin-top: 1rem !important; }
+h3 { font-size: 1.15rem !important; font-weight: 600 !important; margin-top: 0.75rem !important; }
+h4 { font-size: 1rem  !important; font-weight: 600 !important; }
+
+/* ----------------------------------------------------------------
+ *  Caption / muted text — мельче и серее
+ * ---------------------------------------------------------------- */
+[data-testid="stCaptionContainer"] {
+  color: var(--dtp-muted) !important;
+  font-size: 0.85rem !important;
+  line-height: 1.55;
+}
+
+/* ----------------------------------------------------------------
+ *  Tabs — крупнее, аккуратнее spacing
+ * ---------------------------------------------------------------- */
+[data-baseweb="tab-list"] {
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--dtp-border);
+}
+button[data-baseweb="tab"] {
+  font-size: 0.95rem !important;
+  font-weight: 500 !important;
+  padding: 0.55rem 1rem !important;
+  color: var(--dtp-muted) !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+  color: var(--dtp-primary) !important;
+  font-weight: 600 !important;
+}
+
+/* ----------------------------------------------------------------
+ *  Sidebar — фирменный блок
+ * ---------------------------------------------------------------- */
+[data-testid="stSidebar"] {
+  background: var(--dtp-bg-soft);
+  border-right: 1px solid var(--dtp-border);
+}
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2 {
+  margin-top: 0 !important;
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  color: var(--dtp-primary) !important;
+}
+.dtp-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding-bottom: 0.5rem;
+}
+.dtp-brand__title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--dtp-primary);
+  letter-spacing: -0.01em;
+}
+.dtp-brand__subtitle {
+  font-size: 0.78rem;
+  color: var(--dtp-muted);
+}
+.dtp-brand__version {
+  display: inline-block;
+  margin-top: 0.35rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  background: var(--dtp-primary);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* ----------------------------------------------------------------
+ *  Footer (helper page_footer())
+ * ---------------------------------------------------------------- */
+.dtp-footer {
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--dtp-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--dtp-muted);
+  line-height: 1.55;
+}
+.dtp-footer__col {
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.dtp-footer__title {
+  font-weight: 600;
+  color: var(--dtp-text);
+  font-size: 0.85rem;
+}
+.dtp-footer a {
+  color: var(--dtp-primary);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--dtp-primary);
+}
+.dtp-footer a:hover {
+  text-decoration: none;
+  border-bottom-style: solid;
+}
+
+/* ----------------------------------------------------------------
+ *  Inline-код и блоки кода — JetBrains Mono
+ * ---------------------------------------------------------------- */
+code, kbd, pre, [data-testid="stCodeBlock"] {
+  font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace !important;
+}
+[data-testid="stMarkdownContainer"] code {
+  background: var(--dtp-bg-soft);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: #b3306e;
+}
+
+/* ----------------------------------------------------------------
+ *  st.dataframe — tabular figures, bordered
+ * ---------------------------------------------------------------- */
+[data-testid="stDataFrame"] {
+  border-radius: var(--dtp-radius-sm);
+  overflow: hidden;
+}
+[data-testid="stDataFrame"] [role="grid"] {
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* ----------------------------------------------------------------
+ *  Кнопки primary — глубокий синий
+ * ---------------------------------------------------------------- */
+button[kind="primary"] {
+  background-color: var(--dtp-primary) !important;
+  border-color: var(--dtp-primary) !important;
+}
+button[kind="primary"]:hover {
+  background-color: var(--dtp-primary-soft) !important;
+  border-color: var(--dtp-primary-soft) !important;
+}
+
+/* ----------------------------------------------------------------
+ *  st.success / info / warning / error — выровнены под палитру
+ * ---------------------------------------------------------------- */
+[data-testid="stAlertContainer"][kind="success"] {
+  background-color: var(--dtp-insight-bg) !important;
+  border: 1px solid var(--dtp-insight-border) !important;
+}
+
+/* Утилитарные классы для inline-разметки */
+.dtp-pill {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  background: var(--dtp-bg-soft);
+  color: var(--dtp-muted);
+  border: 1px solid var(--dtp-border);
+}
+.dtp-pill--primary {
+  background: var(--dtp-primary);
+  color: #ffffff;
+  border-color: var(--dtp-primary);
+}
+
+.dtp-section-lead {
+  font-size: 0.95rem;
+  color: var(--dtp-muted);
+  line-height: 1.6;
+  margin: 0.25rem 0 1rem 0;
+  max-width: 75ch;
+}

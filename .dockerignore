@@ -1,0 +1,28 @@
+# Большие файлы и dev-артефакты — не должны попадать в образ
+# (мы их монтируем volumes или просто не используем в API)
+data/raw/dtp-stat/
+data/raw/osm/
+data/processed/*.html
+data/processed/*.geojson
+data/processed/*.png
+notebooks/
+venv/
+.venv/
+**/__pycache__/
+**/*.pyc
+.git/
+.github/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+logs/
+catboost_info/
+.env
+.env.*
+docs/
+days/
+PROJECT_FULL.md
+PROJECT_NEXT_SESSIONS.md
+README.md
+*.md

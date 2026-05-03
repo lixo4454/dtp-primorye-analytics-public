@@ -1,0 +1,224 @@
+# -*- coding: utf-8 -*-
+"""
+Создаёт справочник vehicle_brand_steering.csv
+с классификацией ~180 марок ТС по правому/левому рулю.
+"""
+
+from pathlib import Path
+
+CSV_DATA = """brand,is_right_hand_drive,confidence,reasoning
+TOYOTA,true,high,Японская марка - 99% импорт из Японии в Приморье
+NISSAN,true,high,Японская марка - 99% импорт из Японии в Приморье
+HONDA,true,high,Японская марка - 99% импорт из Японии в Приморье (включая мото)
+MITSUBISHI,true,high,Японская марка - 99% импорт из Японии в Приморье
+SUZUKI,true,high,Японская марка - 99% импорт из Японии в Приморье
+MAZDA,true,high,Японская марка - 99% импорт из Японии в Приморье
+SUBARU,true,high,Японская марка - 99% импорт из Японии в Приморье
+LEXUS,true,high,Японский премиум - 99% импорт из Японии
+ISUZU,true,high,Японская марка - 99% импорт из Японии (грузовики/внедорожники)
+DAIHATSU,true,high,Японская марка - 99% импорт из Японии
+YAMAHA,true,high,Японская мото - RHD де-факто на ДВ
+KAWASAKI,true,high,Японская мото - RHD де-факто на ДВ
+INFINITI,true,high,Японский премиум (Nissan) - импорт из Японии
+ACURA,true,high,Японский премиум (Honda) - импорт из Японии
+HOLDEN,true,high,Австралийская марка - праворульный импорт из Австралии
+MITSUOKA,true,high,Японская кастом-марка - праворульная
+Datsun,true,high,Японский бренд (Nissan) - праворульный
+HINDUSTAN,true,medium,Индийская марка (Ambassador) - исторически RHD
+SCION,true,medium,Японский бренд (Toyota) - в основном RHD
+JIANSHE-YAMAHA,true,medium,Совместный китайско-японский (Yamaha) - частично RHD
+УАЗ,false,high,Российская марка - левый руль
+ВАЗ,false,high,Российская марка (LADA) - левый руль
+КАМАЗ,false,high,Российский грузовик - левый руль
+ГАЗ,false,high,Российская марка - левый руль
+ПАЗ,false,high,Российский автобус - левый руль
+УРАЛ,false,high,Российский грузовик - левый руль
+ИЖ,false,high,Российская марка - левый руль
+ЗИЛ,false,high,Российский грузовик - левый руль
+ЛИАЗ,false,high,Российский автобус - левый руль
+МАЗ,false,high,Белорусский грузовик - левый руль
+МОСКВИЧ,false,high,Российская марка - левый руль
+МАЗ-МАН,false,high,Белорусско-немецкий грузовик - левый руль
+НефАЗ,false,high,Российский (КАМАЗ) - левый руль
+СимАЗ,false,high,Российский фургон - левый руль
+КАВЗ,false,high,Российский автобус - левый руль
+ЗАЗ,false,high,Украинская марка - левый руль
+ВОСХОД,false,high,Советская мото - левый руль
+ЗИД,false,high,Советская мото - левый руль
+КРАЗ,false,high,Украинский грузовик - левый руль
+ЛАЗ,false,high,Украинский автобус - левый руль
+ЛУИДОР,false,high,Российский фургон - левый руль
+HYUNDAI,false,high,Корейская марка - левый руль
+KIA,false,high,Корейская марка - левый руль
+DAEWOO,false,high,Корейская марка - левый руль
+SSANGYONG,false,high,Корейская марка - левый руль
+SAMSUNG,false,high,Корейская марка (Renault Samsung) - левый руль
+ASIA,false,high,Корейская марка (Asia Motors/KIA) - левый руль
+HYOSUNG,false,high,Корейская мото - левый руль
+VOLVO,false,high,Шведская марка - левый руль
+MERCEDES,false,high,Немецкая марка - левый руль
+BMW,false,high,Немецкая марка - левый руль
+AUDI,false,high,Немецкая марка - левый руль
+VOLKSWAGEN,false,high,Немецкая марка - левый руль
+PORSCHE,false,high,Немецкая марка - левый руль
+OPEL,false,high,Немецкая марка - левый руль
+MAN,false,high,Немецкий грузовик - левый руль
+ALPINA,false,high,Немецкий тюнинг (BMW) - левый руль
+WIESMANN,false,high,Немецкая марка - левый руль
+SETRA,false,high,Немецкий автобус - левый руль
+LIEBHERR,false,high,Немецкая спецтехника - левый руль
+ADMIRAL,false,high,Немецкая марка - левый руль
+ZUNDAPP,false,high,Немецкая мото - левый руль
+SKODA,false,high,Чешская марка (VW) - левый руль
+JAWA-CZ,false,high,Чешская мото - левый руль
+CZ,false,high,Чешская мото - левый руль
+FORD,false,high,Американская марка - левый руль
+CHEVROLET,false,high,Американская марка - левый руль
+CADILLAC,false,high,Американская марка - левый руль
+JEEP,false,high,Американская марка - левый руль
+DODGE,false,high,Американская марка - левый руль
+CHRYSLER,false,high,Американская марка - левый руль
+HUMMER,false,high,Американская марка - левый руль
+PONTIAC,false,high,Американская марка - левый руль
+LINCOLN,false,high,Американский премиум - левый руль
+BUICK,false,high,Американская марка - левый руль
+SATURN,false,high,Американская марка - левый руль
+GMC,false,high,Американская марка (GM) - левый руль
+EAGLE,false,high,Американская марка - левый руль
+HARLEY-DAVIDSON,false,high,Американская мото - левый руль
+INDIAN,false,high,Американская мото - левый руль
+VICTORY,false,high,Американская мото - левый руль
+ATK,false,high,Американская мото - левый руль
+MTT,false,high,Американская мото - левый руль
+FREIGHTLINER,false,high,Американский грузовик - левый руль
+KENWORTH,false,high,Американский грузовик - левый руль
+PETERBILT,false,high,Американский грузовик - левый руль
+RENAULT,false,high,Французская марка - левый руль
+PEUGEOT,false,high,Французская марка - левый руль
+CITROEN,false,high,Французская марка - левый руль
+DACIA,false,high,Французско-румынская (Renault) - левый руль
+ALPINE,false,high,Французская спортивная марка - левый руль
+VENTURI,false,high,Французская марка - левый руль
+FIAT,false,high,Итальянская марка - левый руль
+ALFA ROMEO,false,high,Итальянская марка - левый руль
+DUCATI,false,high,Итальянская мото - левый руль
+APRILIA,false,high,Итальянская мото - левый руль
+MOTO GUZZI,false,high,Итальянская мото - левый руль
+MOTOBI,false,high,Итальянская мото - левый руль
+LAVERDA,false,high,Итальянская мото - левый руль
+INNOCENTI,false,high,Итальянская марка - левый руль
+BERTONE,false,high,Итальянский кузовщик - левый руль
+BETA,false,high,Итальянская мото - левый руль
+GILERA,false,high,Итальянская мото (испанский Piaggio) - левый руль
+LAND ROVER,false,high,Британская марка - LHD-версии для РФ
+JAGUAR,false,high,Британская марка - LHD-версии для РФ
+MINI,false,high,BMW group - LHD-версии для РФ
+ROVER,false,high,Британская марка - LHD-версии для РФ
+TRIUMPH,false,high,Британская мото - LHD-версии для РФ
+BSA,false,high,Британская мото - LHD-версии для РФ
+ROLLS-ROYCE,false,high,Британский премиум (BMW) - LHD-версии для РФ
+BRISTOL,false,high,Британская марка - LHD-версии для РФ
+INVICTA,false,high,Британская марка - LHD-версии для РФ
+CATERHAM,false,high,Британская марка - LHD-версии для РФ
+MG,false,high,Британская марка (сейчас SAIC) - LHD-версии для РФ
+CCM,false,high,Британская мото - левый руль
+KTM,false,high,Австрийская мото - левый руль
+HUSABERG,false,high,Австрийская мото - левый руль
+PUCH,false,high,Австрийская мото - левый руль
+GAS GAS,false,high,Испанская мото - левый руль
+DERBI,false,high,Испанская мото - левый руль
+MOTORHISPANIA,false,high,Испанская мото - левый руль
+SAAB,false,high,Шведская марка - левый руль
+SPYKER,false,high,Голландская марка - левый руль
+SCANIA,false,high,Шведский грузовик - левый руль
+IVECO,false,high,Итальянский грузовик - левый руль
+DAF,false,high,Голландский грузовик - левый руль
+KANUNI,false,high,Турецкая мото - левый руль
+RAJDOOT,false,high,Индийская мото - левый руль
+KEEWAY,false,high,Тайваньская мото - левый руль
+KYMCO,false,high,Тайваньская мото - левый руль
+SYM,false,high,Тайваньская мото - левый руль
+PGO,false,high,Тайваньская мото - левый руль
+TATA,false,high,Индийская марка (легковые/грузовые) - левый руль
+MARUTI,false,high,Индийская марка (Suzuki) - левый руль
+MOTOLEVO,false,high,Российская мото-марка - левый руль
+SOLO,false,high,Российская мото-марка - левый руль
+ALFER,false,high,Российская мото-марка - левый руль
+TITAN,false,high,Российская мото-марка - левый руль
+ABM,false,high,Российская мото-марка - левый руль
+MOTOTRANS,false,high,Российская мото-марка - левый руль
+FORSAGE,false,high,Российская мото-марка - левый руль
+DANDY,false,high,Российская мото-марка - левый руль
+MM,false,high,Мото-марка - левый руль
+BM,false,high,Мото-марка - левый руль
+SCEO,false,high,Мото-марка - левый руль
+DUCAR,false,high,Мото-марка - левый руль
+TOMOTO,false,high,Мото-марка - левый руль
+DNEPR,false,high,Украинская мото - левый руль
+MINSK,false,high,Белорусская мото - левый руль
+HOWO,false,high,Китайский грузовик (Sinotruk) - левый руль
+SHACMAN,false,high,Китайский грузовик - левый руль
+SHAANXI,false,high,Китайский грузовик - левый руль
+SITRAK,false,high,Китайский грузовик (Sinotruk) - левый руль
+FOTON,false,high,Китайский грузовик - левый руль
+DONG FENG,false,high,Китайский грузовик - левый руль
+DONGHAI,false,high,Китайский грузовик - левый руль
+SHEN LONG,false,high,Китайский автобус - левый руль
+YUTONG,false,high,Китайский автобус - левый руль
+HIGER,false,high,Китайский автобус - левый руль
+KING LONG,false,high,Китайский автобус - левый руль
+GEELY,false,high,Китайская марка - левый руль
+CHERY,false,high,Китайская марка - левый руль
+HAVAL,false,high,Китайская марка - левый руль
+EXEED,false,high,Китайская марка (Chery премиум) - левый руль
+GAC,false,high,Китайская марка - левый руль
+BYD,false,high,Китайская марка - левый руль
+CHANGAN,false,high,Китайская марка - левый руль
+FAW,false,high,Китайская марка - левый руль
+JAC,false,high,Китайская марка - левый руль
+GREAT WALL,false,high,Китайская марка - левый руль
+LIFAN,false,high,Китайская марка - левый руль
+JIANGHUAI,false,high,Китайская марка - левый руль
+JIANGLING,false,high,Китайский грузовик - левый руль
+JINBEI,false,high,Китайская марка - левый руль
+JINCHENG,false,high,Китайская мото - левый руль
+LIXIANG,false,high,Китайская марка - левый руль
+SHUANGHUAN,false,high,Китайская марка - левый руль
+SOUEAST,false,high,Китайская марка - левый руль
+HUABEI,false,high,Китайская мото - левый руль
+TIANYE,false,high,Китайская мото - левый руль
+SHUCHI,false,high,Китайская мото - левый руль
+KINLON MOTORS,false,high,Китайская мото - левый руль
+DADI,false,high,Китайская марка - левый руль
+BEIJING,false,high,Китайская марка - левый руль
+BEIFAN,false,high,Китайская марка - левый руль
+BRILLIANCE,false,high,Китайская марка - левый руль
+FUQI,false,high,Китайская марка - левый руль
+XINGFU,false,high,Китайская мото - левый руль
+ZONDA,false,high,Китайский автобус - левый руль
+ZX,false,high,Китайская марка - левый руль
+HONLING,false,high,Китайская мото - левый руль
+REGAL RAPTOR,false,high,Китайская мото - левый руль
+CHANG-JIANG,false,medium,Китайская мото (копия BMW R71) - LHD
+AC,false,high,Британская марка (AC Cars) - LHD-версии для РФ
+IRISBUS,false,high,Итальянский автобус (Iveco group) - левый руль
+MCC,false,high,Smart (Mercedes Micro Compact Car) - левый руль
+REIEJU,false,high,Испанская мото (Rieju) - левый руль
+KANGDA,false,high,Китайская спецтехника - левый руль
+SRECTRE,false,high,Неизвестная марка (возможно опечатка) - по умолчанию LHD
+"""
+
+# Путь относительно расположения скрипта (project_root/data/raw/...)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+out_path = PROJECT_ROOT / "data" / "raw" / "vehicle_brand_steering.csv"
+out_path.parent.mkdir(parents=True, exist_ok=True)
+
+# Записываем в UTF-8 без BOM с LF-переводами
+out_path.write_text(CSV_DATA, encoding="utf-8", newline="\n")
+
+# Проверка
+lines = out_path.read_text(encoding="utf-8").splitlines()
+print(f"Готово: {out_path.absolute()}")
+print(f"Строк (с заголовком): {len(lines)}")
+print(f"Первая строка: {lines[0]}")
+print(f"Последняя строка: {lines[-1]}")

@@ -1,0 +1,128 @@
+name: CI
+
+# ──────────────────────────────────────────────────────────────────────
+# CI-пайплайн для проекта DTP-Primorye-Analytics.
+#
+# 3 параллельных job'а:
+#   1. lint   — ruff на src + tests, очень быстрый (<1 мин)
+#   2. test   — unit-тесты (без БД/моделей), Python 3.12 + минимум deps
+#   3. build  — сборка Docker-образа dtp_api для проверки Dockerfile.api
+#
+# Тяжёлые integration-тесты (FastAPI smoke + админ-эндпоинты) запускаются
+# отдельно — требуют Postgres+PostGIS, OSM road graph и обученные модели.
+# ──────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # 1. Lint
+  # ──────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff==0.8.4
+
+      - name: ruff check
+        run: ruff check src tests
+
+      - name: ruff format check
+        run: ruff format --check src tests
+        continue-on-error: true  # форматирование — soft-warning, не блокирует CI
+
+  # ──────────────────────────────────────────────────────────────────
+  # 2. Unit tests
+  # ──────────────────────────────────────────────────────────────────
+  test:
+    name: Unit tests (pytest)
+    runs-on: ubuntu-latest
+    # Stub POSTGRES env vars — нужны для импорта src/database/session.py,
+    # который собирает URL на module-level. Unit-тесты к БД не подключаются,
+    # им нужен только успешный import цепочки src.database → src.loaders/analysis.
+    env:
+      POSTGRES_USER: ci_stub
+      POSTGRES_PASSWORD: ci_stub
+      POSTGRES_DB: ci_stub
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: '5432'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install test dependencies
+        # src/database/__init__.py загружает models.py (geoalchemy2),
+        # src/loaders/__init__.py — requests/bs4, src/nlp/dtp_ner.py — natasha.
+        # Поэтому ставим почти весь requirements.txt, исключая только
+        # heavy ML (torch/prophet/catboost/sentence-transformers/bertopic
+        # ~3 ГБ) — наши unit-тесты их не вызывают.
+        run: |
+          python -m pip install --upgrade pip
+          # Создаём reduced requirements: убираем heavy ML-пакеты
+          grep -vE '^(torch|prophet|catboost|sentence-transformers|bertopic|hdbscan|umap-learn|jupyter|ipykernel)==' requirements.txt > requirements-ci.txt
+          pip install -r requirements-ci.txt
+
+      - name: Run unit tests
+        run: pytest tests/unit -v --tb=short
+
+      - name: Coverage report
+        run: |
+          pytest tests/unit \
+            --cov=src.loaders \
+            --cov=src.nlp \
+            --cov=src.analysis \
+            --cov-report=term \
+            --cov-report=xml
+
+      - name: Upload coverage XML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 14
+
+  # ──────────────────────────────────────────────────────────────────
+  # 3. Build Docker
+  # ──────────────────────────────────────────────────────────────────
+  build:
+    name: Build Docker (api)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build dtp_api image (cache only, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.api
+          push: false
+          load: false
+          tags: dtp_api:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

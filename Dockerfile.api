@@ -1,0 +1,88 @@
+## Production-grade образ для FastAPI-сервиса.
+##
+## Содержит весь production-стек:
+## - FastAPI + uvicorn (стандартные exрtras)
+## - asyncpg + psycopg для AsyncSession
+## - CatBoost / Prophet / BERTopic — все 4 модели проекта
+## - cmdstan 2.33.1 — Stan-бэкенд для Prophet (нужен для predict на pickle-моделях)
+##
+## Что НЕ ставим (отделяем от тренировочного образа):
+## - jupyter / ipykernel / black / ruff — dev-инструменты
+## - streamlit / folium / plotly — фронтовый стек (свой контейнер)
+##
+## Запуск:
+##   docker compose up -d api
+## Healthcheck:
+##   docker compose ps api  → health status
+##   curl http://localhost:8000/health
+
+FROM python:3.12-slim
+
+# Системные зависимости для сборки native-библиотек (catboost, hdbscan,
+# numba, geoalchemy2 / shapely на ARM, libpq для psycopg)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Сначала ставим torch CPU-only — экономит ~3 ГБ vs дефолтный wheel
+# с nvidia-cuda-* libs. Inference на CPU нам полностью достаточно
+# (sentence-transformers и BERTopic используются только для load/lookup,
+# не для transform — см. src/api/routers/nlp.py). Если позже понадобится
+# CUDA — отдельный Dockerfile.api.gpu с другим index-url.
+RUN pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch==2.5.1
+
+# Остальные Python-зависимости. pip увидит torch уже установленным
+# и пропустит его. Слой кэшируется отдельно от COPY src/ — изменения
+# в src/ не триггерят пересборку pip install.
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir uvloop httptools
+
+# Stan-бэкенд для Prophet — копируем подход из Dockerfile.prophet:
+# Prophet 1.1.6 ищет cmdstan строго в `prophet/stan_model/cmdstan-2.33.1`,
+# иначе AttributeError 'stan_backend'. inference на загруженной модели
+# тоже требует cmdstan-binary, иначе при первом predict() — фейл.
+RUN python -m cmdstanpy.install_cmdstan \
+    --version 2.33.1 \
+    --dir /usr/local/lib/python3.12/site-packages/prophet/stan_model \
+    --overwrite
+ENV CMDSTAN=/usr/local/lib/python3.12/site-packages/prophet/stan_model/cmdstan-2.33.1
+
+# Копируем исходный код. models/ и data/ монтируем как volumes (read-only)
+# из docker-compose.yml — не копируем в образ, чтобы:
+# (1) не раздувать image (модели + данные ~50МБ),
+# (2) обновление модели не требовало ребилда образа.
+COPY src/ /app/src/
+COPY alembic/ /app/alembic/
+COPY alembic.ini /app/alembic.ini
+
+# Не-root пользователь — стандартная hardening-практика
+RUN useradd --create-home --shell /bin/bash apiuser \
+    && chown -R apiuser:apiuser /app
+USER apiuser
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+EXPOSE 8000
+
+# Healthcheck — Docker дёргает /health каждые 30с
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl --fail --silent http://localhost:8000/health || exit 1
+
+# Production-команда: 1 worker (lifespan загружает модели один раз;
+# горизонтальное масштабирование — отдельные replicas через docker-compose
+# `deploy.replicas`, а не --workers, чтобы не дублировать ML-модели в RAM).
+CMD ["uvicorn", "src.api.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "1", \
+     "--access-log", \
+     "--log-level", "info"]

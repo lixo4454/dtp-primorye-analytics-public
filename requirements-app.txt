@@ -1,0 +1,26 @@
+# Минимальный набор зависимостей для Streamlit-дашборда (Dockerfile.app).
+# Сюда НЕ входят: torch, catboost, prophet, bertopic, sentence-transformers,
+# natasha и cmdstan — это всё в Dockerfile.api для FastAPI-инференса.
+# Дашборд только потребляет API и читает агрегаты из БД.
+#
+# Версии синхронизированы с requirements.txt — менять там и здесь вместе.
+
+# === Streamlit-стек ===
+streamlit==1.41.1
+folium==0.19.4
+streamlit-folium==0.24.0  # click events для interactive map
+plotly==5.24.1
+
+# === HTTP-клиент к FastAPI ===
+httpx==0.28.1
+
+# === Работа с данными ===
+pandas==2.2.3
+numpy==1.26.4
+
+# === БД (только sync psycopg, без asyncpg/geoalchemy2/shapely) ===
+sqlalchemy==2.0.36
+psycopg[binary]==3.2.3
+
+# === Окружение ===
+python-dotenv==1.0.1

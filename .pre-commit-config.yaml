@@ -1,0 +1,43 @@
+# Pre-commit hooks для проекта DTP-Primorye-Analytics.
+#
+# Установка локально:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Принципы:
+# - Минимальный, conservative набор — фокус на гигиене (trailing spaces,
+#   EOF, конфликтные маркеры) и единственном линтере (ruff).
+# - Тяжёлые проверки (mypy, тесты) — в GitHub Actions, а не на каждый
+#   коммит локально.
+# - Конфиг ruff берётся из pyproject.toml — не дублируется здесь.
+
+default_language_version:
+  python: python3.12
+
+repos:
+  # ──────────────────────────────────────────────────────────────────
+  # Базовая гигиена: trailing whitespace, EOF, конфликтные маркеры
+  # ──────────────────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'  # markdown сохраняет hard-break через два пробела
+      - id: end-of-file-fixer
+        exclude: '^data/.*'
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=2048']
+        exclude: '^(data/raw|notebooks)/.*'
+
+  # ──────────────────────────────────────────────────────────────────
+  # Ruff: линтер + форматтер (заменяет flake8+isort+black)
+  # ──────────────────────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format

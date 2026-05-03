@@ -1,0 +1,59 @@
+# docker-compose.override.yml — dev-режим (применяется автоматически
+# поверх docker-compose.yml при `docker compose up`).
+#
+# Зачем: основной docker-compose.yml собран для production-grade
+# деплоя — образы dtp_api / dtp_app COPY'ят исходники внутрь, что
+# даёт воспроизводимость и иммутабельность. Но в dev-цикле каждое
+# изменение src/ требует rebuild (~30-60 сек на api с torch/catboost).
+#
+# Этот override монтирует каталоги src/ как read-only volumes:
+# - api: автоматический reload uvicorn'a при изменении src/api/* и src/ml/*
+# - app: streamlit runOnSave подхватывает изменения src/app/*
+#
+# В production override не используется (CI/CD копирует только
+# docker-compose.yml без override). Локально применяется автоматически.
+#
+# Для отключения override: `docker compose -f docker-compose.yml up`
+
+services:
+  api:
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    # uvicorn --reload триггерится при изменении любого .py в /app/src
+    command: ["uvicorn", "src.api.main:app", "--host", "0.0.0.0",
+              "--port", "8000", "--reload",
+              "--reload-dir", "/app/src"]
+
+  app:
+    volumes:
+      - ./src/app:/app/src/app:ro
+      - ./.streamlit:/app/.streamlit:ro
+      # Streamlit-страница severity_predictor читает
+      # catboost_form_schema.json (8.6 КБ — медиана/мода train),
+      # nlp_insights читает telegram_umap_2d.npz (~75 КБ).
+      # Монтируем processed/ ro, чтобы оба файла были доступны
+      # без необходимости копировать их в Dockerfile.app (в проде
+      # они уйдут в COPY). При обновлении схемы — restart app
+      # подхватит новую версию автоматически.
+      - ./data/processed:/app/data/processed:ro
+    # Streamlit's runOnSave следит за файлами view'ов; restart контейнера
+    # подхватывает добавление новых модулей (импорты не reload'ятся в
+    # script-rerun).
+
+  # celery_worker и celery_beat — bind-mount src/ + scripts/
+  # для горячего отражения изменений кода без rebuild image'а
+  # (worker всё равно нужно перезапускать после изменений в @logged_task,
+  # т.к. Celery держит регистр задач при старте).
+  celery_worker:
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+  celery_beat:
+    volumes:
+      - ./src:/app/src:ro
+      - ./logs:/app/logs

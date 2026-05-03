@@ -1,0 +1,78 @@
+[project]
+name = "dtp-primorye-analytics"
+version = "1.0.0"
+description = "Программа для интеллектуального анализа ДТП в Приморском крае"
+requires-python = ">=3.12"
+
+# ----------------------------------------------------------------------
+# Ruff — единый линтер + форматтер (заменяет flake8+isort+black для нас)
+# ----------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [
+    "alembic/versions",  # авто-генерация Alembic
+    "venv",
+    ".venv",
+    "data",
+    "notebooks",
+]
+
+[tool.ruff.lint]
+# Минимально-инвазивный набор: pycodestyle errors (E) + pyflakes (F) +
+# import sorting (I). Pyupgrade/bugbear/simplify в проекте намеренно
+# выключены — legacy-аннотации (`Optional[X]`) и `dict()`-конструкторы
+# работают на Python 3.12 и не несут багов; массовая перепись в новый
+# стиль = noise в git history без выгоды.
+select = ["E", "F", "I"]
+ignore = [
+    "E501",   # line too long — длинные SQL/docstring допустимы
+    "E402",   # import not at top — нужно для set_event_loop_policy в тестах
+    "F541",   # f-string без placeholder — мелочь
+    "E741",   # ambiguous variable name 'l' — допустимо в формулах
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F401"]            # фикстуры импортируются «впрок»
+"scripts/**" = ["F401"]
+"alembic/env.py" = ["E402", "F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ----------------------------------------------------------------------
+# Pytest — config дублируется в pytest.ini (ради backwards-compat),
+# но coverage-настройки тут.
+# ----------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+filterwarnings = [
+    "ignore::DeprecationWarning:google.*",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
+markers = [
+    "integration: тесты, требующие живой БД/Redis/моделей (исключаются в CI lint-job'е)",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/__init__.py",
+    "src/**/__init__.py",
+    "*/migrations/*",
+    "*/alembic/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]

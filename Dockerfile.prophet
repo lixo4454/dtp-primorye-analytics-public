@@ -1,0 +1,43 @@
+## Окружение для обучения Prophet-моделей и визуализации.
+##
+## Зачем: Prophet 1.x на Linux без проблем тянет cmdstan через wheel,
+## тогда как на Windows требует ручной настройки RTools40+mingw32-make.
+## Обучение в контейнере = воспроизводимый pipeline + одна команда
+## `docker compose run --rm prophet_trainer python scripts/...`.
+##
+## Запуск: `docker compose --profile train up --build prophet_trainer`
+## или `docker compose run --rm prophet_trainer python scripts/<script>.py`
+
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Закрепляем те же версии что в venv разработчика (см. requirements.txt)
+RUN pip install --no-cache-dir \
+    prophet==1.1.6 \
+    pandas==2.2.3 \
+    statsmodels==0.14.6 \
+    numpy==1.26.4 \
+    matplotlib \
+    sqlalchemy \
+    psycopg[binary] \
+    geoalchemy2 \
+    python-dotenv
+
+# Stan-бэкенд для Prophet — нужна КОНКРЕТНО версия 2.33.1 (хардкод в
+# Prophet 1.1.6 — путь `prophet/stan_model/cmdstan-2.33.1`). Без неё
+# `Prophet().fit(...)` падает с обманчивой ошибкой
+# `AttributeError: 'Prophet' object has no attribute 'stan_backend'`.
+# Ставим прямо в директорию пакета — Prophet сам подберёт.
+RUN python -m cmdstanpy.install_cmdstan \
+    --version 2.33.1 \
+    --dir /usr/local/lib/python3.12/site-packages/prophet/stan_model \
+    --overwrite
+ENV CMDSTAN=/usr/local/lib/python3.12/site-packages/prophet/stan_model/cmdstan-2.33.1
+
+CMD ["python", "-c", "import prophet; print('Prophet', prophet.__version__, 'ready')"]

@@ -1,0 +1,271 @@
+services:
+  # ============================================
+  # PostgreSQL 16 + PostGIS — база данных
+  # ============================================
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: dtp_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dtp_network
+
+  # ============================================
+  # Redis — кэш и брокер очередей Celery
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: dtp_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dtp_network
+
+  # ============================================
+  # API — FastAPI-сервис на ML-моделях и БД
+  # ============================================
+  # Production-grade: lifespan грузит 4 ML-модели в память при старте,
+  # CORS открыт для Streamlit (8501) и React (5173), healthcheck на /health.
+  # models/ и data/ монтируются read-only — обновление артефактов
+  # не требует ребилда образа.
+  #
+  # Запуск:
+  #   docker compose up -d api
+  # Доступ:
+  #   http://localhost:8000/docs  — Swagger UI
+  #   http://localhost:8000/health — sanity-check
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: dtp_api:latest
+    container_name: dtp_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      # Артефакты ML-моделей и предсчитанных данных — read-only.
+      # Обновляются скриптами с хоста (или Celery через Celery).
+      - ./models:/app/models:ro
+      - ./data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - dtp_network
+
+  # ============================================
+  # APP — Streamlit-дашборд
+  # ============================================
+  # Production-grade: минимальный образ ~600 МБ (без torch/catboost/prophet —
+  # ML-инференс в `api`, дашборд только потребляет API + direct DB).
+  # CORS на api настроен на 8501. Зависит от `api` healthy.
+  #
+  # Запуск:
+  #   docker compose up -d app
+  # Доступ:
+  #   http://localhost:8501
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    image: dtp_app:latest
+    container_name: dtp_app
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      # Direct DB — для страницы Типы ДТП (cross-tab агрегат)
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # FastAPI — внутри docker-сети api живёт по hostname `api`,
+      # а не localhost. Override default DTP_API_URL из api_client.py.
+      DTP_API_URL: http://api:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - dtp_network
+
+  # ============================================
+  # Celery worker — фоновые задачи
+  # ============================================
+  # Переиспользуем dtp_api:latest — он уже содержит celery 5.4.0,
+  # prophet+cmdstan, catboost, asyncpg, redis-client. Это даёт single
+  # source of truth (worker и API имеют идентичные версии Python-зависимостей)
+  # и не надо собирать отдельный образ.
+  #
+  # --pool=solo: на 1-CPU контейнере достаточно; для prefork нужно явно
+  # задать concurrency и понимать, что prophet-train держит ~2 GB RAM.
+  # На Windows-хосте + Docker-Desktop solo также стабильнее на dev.
+  #
+  # Healthcheck: celery inspect ping (без таймаута клиент висит, поэтому
+  # короткий socket-timeout в брокере и timeout=5s).
+  celery_worker:
+    image: dtp_api:latest
+    container_name: dtp_celery_worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      C_FORCE_ROOT: "1"
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command: ["celery", "-A", "src.tasks.celery_app", "worker",
+              "--loglevel=info", "--pool=solo",
+              "--logfile=/app/logs/celery_worker.log"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A src.tasks.celery_app inspect ping -t 5 || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - dtp_network
+
+  # ============================================
+  # Celery beat — планировщик расписания
+  # ============================================
+  # Beat — single-instance: ровно один контейнер на проект. Если
+  # запустить два — задачи будут duplicate'иться. При scale-up worker'ов
+  # beat остаётся одним.
+  #
+  # PID-файл и schedule-файл — в /tmp (не нужны после restart).
+  celery_beat:
+    image: dtp_api:latest
+    container_name: dtp_celery_beat
+    restart: unless-stopped
+    depends_on:
+      celery_worker:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+    volumes:
+      - ./logs:/app/logs
+    command: ["celery", "-A", "src.tasks.celery_app", "beat",
+              "--loglevel=info",
+              "--schedule=/tmp/celerybeat-schedule",
+              "--pidfile=/tmp/celerybeat.pid",
+              "--logfile=/app/logs/celery_beat.log"]
+    networks:
+      - dtp_network
+
+  # ============================================
+  # Prophet-trainer — Linux-окружение для обучения ML-моделей
+  # ============================================
+  # Не стартует с `docker compose up` (profile=train). Запуск вручную:
+  #   docker compose run --rm prophet_trainer python scripts/train_prophet_model.py
+  #   docker compose run --rm prophet_trainer python scripts/visualize_forecast.py
+  # Зачем отдельный контейнер: cmdstan (бэкенд Prophet) на Windows
+  # требует RTools40 + нативный mingw32-make и часто падает; в
+  # python:3.12-slim Linux pip install ставит всё одной командой.
+  prophet_trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.prophet
+    image: dtp_prophet_trainer:latest
+    container_name: dtp_prophet_trainer
+    profiles:
+      - train
+    volumes:
+      - ./:/app
+    working_dir: /app
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - dtp_network
+
+# ============================================
+# Volumes — постоянное хранилище данных
+# ============================================
+volumes:
+  postgres_data:
+    name: dtp_postgres_data
+  redis_data:
+    name: dtp_redis_data
+
+# ============================================
+# Networks — изолированная сеть для контейнеров
+# ============================================
+networks:
+  dtp_network:
+    name: dtp_network
+    driver: bridge
